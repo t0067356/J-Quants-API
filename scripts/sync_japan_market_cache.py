@@ -9,6 +9,7 @@ from urllib import error, parse, request
 
 
 JQUANTS_BASE_URL = "https://api.jquants.com/v2"
+MARKET_QUOTE_LOOKBACK_DAYS = 45
 IMPORT_URL = os.environ.get(
     "CHICHANG_MARKET_IMPORT_URL",
     "https://chichangstockapp.com/api/market/cache/import",
@@ -52,7 +53,7 @@ def coverage_end_date(message):
     return match.group(1) if match else None
 
 
-def recent_dates(days=5):
+def recent_dates(days=MARKET_QUOTE_LOOKBACK_DAYS):
     today = datetime.now(timezone.utc).date()
     return [(today - timedelta(days=offset)).isoformat() for offset in range(days)]
 
@@ -106,10 +107,6 @@ def fetch_daily_quotes():
         rows = payload.get("data") or []
         if status == 200 and len(rows) >= 1000:
             return fallback_date, rows
-    status, payload = fetch_jquants("equities/bars/daily", {"date": "2026-04-07"})
-    rows = payload.get("data") or []
-    if status == 200 and len(rows) >= 1000:
-        return "2026-04-07", rows
     raise RuntimeError(f"J-Quants daily quote validation failed: status={status}, rows={len(rows)}")
 
 

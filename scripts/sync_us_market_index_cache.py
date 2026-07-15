@@ -52,7 +52,7 @@ def build_points(symbol, source):
         })
     if not points:
         raise RuntimeError(f"FinanceDataReader returned no valid close for {symbol}")
-    return points[-5:]
+    return points
 
 
 def upload(index_code, source, points):
@@ -63,6 +63,7 @@ def upload(index_code, source, points):
         "index": index_code,
         "source": source,
         "asOf": points[-1]["date"],
+        "replaceFrom": points[0]["date"],
         "points": points,
     }
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
