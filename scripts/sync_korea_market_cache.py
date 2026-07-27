@@ -2,7 +2,7 @@
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib import request, error
 
 import FinanceDataReader as fdr
@@ -12,6 +12,8 @@ IMPORT_URL = os.environ.get(
     "CHICHANG_MARKET_IMPORT_URL",
     "https://chichangstockapp.com/api/market/cache/import",
 )
+KOREA_TIMEZONE = timezone(timedelta(hours=9))
+MARKET_DATE_LOOKBACK_DAYS = 14
 
 
 def first_value(row, names):
@@ -39,13 +41,32 @@ def text_value(value):
     return str(value).strip()
 
 
+def latest_korea_trading_date(today=None, data_reader=None):
+    today = today or datetime.now(KOREA_TIMEZONE).date()
+    start = (today - timedelta(days=MARKET_DATE_LOOKBACK_DAYS)).isoformat()
+    reader = data_reader or fdr.DataReader
+    df = reader("KS11", start)
+    if df is None or df.empty:
+        raise RuntimeError("FinanceDataReader returned no KOSPI rows for KRX market date")
+
+    latest = df.index[-1]
+    date_text = latest.date().isoformat() if hasattr(latest, "date") else str(latest)[:10]
+    try:
+        parsed = datetime.strptime(date_text, "%Y-%m-%d").date()
+    except ValueError as exc:
+        raise RuntimeError(f"FinanceDataReader returned invalid KRX market date: {date_text}") from exc
+    if parsed > today:
+        raise RuntimeError(f"FinanceDataReader returned future KRX market date: {date_text}")
+    return date_text
+
+
 def build_records():
     df = fdr.StockListing("KRX")
     if df is None or df.empty:
         raise RuntimeError("FinanceDataReader returned no KRX rows")
 
     now = datetime.now(timezone.utc).isoformat()
-    today = datetime.now(timezone.utc).date().isoformat()
+    as_of = latest_korea_trading_date()
     records = []
     for _, series in df.iterrows():
         row = series.to_dict()
@@ -74,23 +95,23 @@ def build_records():
             "volume": volume,
             "marketCap": market_cap,
             "source": "FinanceDataReader/KRX",
-            "asOf": today,
+            "asOf": as_of,
             "updatedAt": now,
         })
 
     if len(records) < 500:
         raise RuntimeError(f"KRX record validation failed: only {len(records)} records")
-    return records
+    return as_of, records
 
 
-def upload(records):
+def upload(as_of, records):
     secret = os.environ.get("MARKET_SYNC_SECRET", "").strip()
     if not secret:
         raise RuntimeError("MARKET_SYNC_SECRET is required")
     payload = {
         "market": "korea",
         "source": "FinanceDataReader/KRX",
-        "asOf": datetime.now(timezone.utc).date().isoformat(),
+        "asOf": as_of,
         "records": records,
     }
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -115,9 +136,9 @@ def upload(records):
 
 
 def main():
-    records = build_records()
-    print(f"Prepared {len(records)} KRX records")
-    upload(records)
+    as_of, records = build_records()
+    print(f"Prepared {len(records)} KRX records, asOf={as_of}")
+    upload(as_of, records)
 
 
 if __name__ == "__main__":
