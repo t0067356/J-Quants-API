@@ -2,8 +2,8 @@ name: Sync Korea Market Cache
 
 on:
   schedule:
-    # 16:20 Asia/Taipei = 08:20 UTC
-    - cron: "20 8 * * *"
+    # 16:10 Asia/Taipei = 08:10 UTC
+    - cron: "10 8 * * *"
   workflow_dispatch:
 
 jobs:
